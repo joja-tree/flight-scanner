@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*
+!.env.example
+!worker/.env.example
+*.tsbuildinfo
+*-debug.log
+work/
+secrets/
+worker/artifacts/
+.DS_Store
+.firebase/

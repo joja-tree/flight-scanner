@@ -1,0 +1,5 @@
+import {FieldPath} from 'firebase-admin/firestore';
+import {db} from '@/lib/server/admin';
+import {failure,identity} from '@/lib/server/http';
+import {HttpError} from '@/lib/server/policy';
+export async function GET(req:Request){try{if(!(await identity(req)).owner)throw new HttpError(403,'Owner access required');const cursor=new URL(req.url).searchParams.get('cursor');if(cursor&&!/^[A-Z]{3}_2027-\d{2}-\d{2}$/.test(cursor))throw new HttpError(400,'Invalid cursor');let q=db().collection('fares').orderBy(FieldPath.documentId()).limit(51);if(cursor)q=q.startAfter(cursor);const [fares,routes]=await Promise.all([q.get(),db().collection('destinations').limit(100).get()]);const rows=fares.docs.slice(0,50);const observations=rows.flatMap(d=>{const f=d.data();return f.lastVerified&&f.lastVerified.checkedAt!==f.latest.checkedAt?[f.latest,f.lastVerified]:[f.latest];});return Response.json({bundle:{version:1,destinations:routes.docs.map(d=>d.data()),observations},nextCursor:fares.size>50?rows[49].id:null},{headers:{'Cache-Control':'no-store'}});}catch(e){return failure(e);}}

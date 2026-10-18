@@ -1,0 +1,8 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  // Public reads use bounded, cacheable web endpoints. All direct client access denied.
+  // Admin SDK services bypass these rules and enforce identity and quotas server-side.
+  match /{document=**} { allow read, write: if false; }
+ }
+}

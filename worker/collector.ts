@@ -1,4 +1,4 @@
-import {chromium,type Browser,type Page,type Locator} from 'playwright';
+import {chromium,type Browser,type Page} from 'playwright';
 import {bookingUrl,mondayAfter,observationSchema,type Observation,type Destination} from '../lib/domain';
 import {parseFlightCard,verifySummary,type FlightCard} from './parser';
 import {createHash} from 'node:crypto';
@@ -26,8 +26,10 @@ export class Collector {
   const context=await this.browser.newContext({locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000}});
   const page=await context.newPage();page.setDefaultTimeout(15000);
   const base={destination:route.code,departure:date,returnDate:mondayAfter(date),checkedAt:new Date().toISOString(),quote:null,indicativeBaseFare:null};
+  let navigationStatus:number|null=null;
   try{
-   await page.goto(bookingUrl(route.code,date),{waitUntil:'domcontentloaded',timeout:45000});
+   const response=await page.goto(bookingUrl(route.code,date),{waitUntil:'domcontentloaded',timeout:45000});
+   navigationStatus=response?.status()??null;
    await this.checkBlocked(page);
    await page.getByText('2 Adults',{exact:true}).first().waitFor({state:'visible',timeout:30000});
    await this.checkBlocked(page);
@@ -53,7 +55,20 @@ export class Collector {
    const dir=process.env.ARTIFACT_DIR??'worker/artifacts';await mkdir(dir,{recursive:true});
    await writeFile(`${dir}/${route.code}_${date}_${Date.now()}.png`,shot);
    return observationSchema.parse({...base,status:'verified',quote:{total,currency:'PHP',adults:2,outbound:leg(out,date),inbound:leg(back,base.returnDate),travelTax:route.kind==='domestic'?'not-applicable':'unknown',verifiedInSummary:true},note:'GO Basic, both adults and both legs confirmed in booking summary. Flight times are airport-local. Optional extras excluded.',evidence:`Browser booking summary screenshot SHA256:${digest}`});
-  }catch(e){await this.checkBlocked(page).catch(error=>{if(error instanceof Blocked)throw error;});throw e;}
+  }catch(e){
+   // Preserve the failed page before closing Chromium; do not collect cookies or storage.
+   try{
+    const dir=process.env.ARTIFACT_DIR??'worker/artifacts';
+    await mkdir(dir,{recursive:true});
+    const prefix=`${dir}/failure_${route.code}_${date}_${Date.now()}`;
+    const body=await page.locator('body').innerText({timeout:3000}).catch(()=>'(Body unavailable)');
+    const screenshot=await page.screenshot({fullPage:true,timeout:5000}).then(async bytes=>{await writeFile(`${prefix}.png`,bytes);return `${prefix}.png`;}).catch(()=>null);
+    const url=new URL(page.url());url.search='';url.hash='';
+    await writeFile(`${prefix}.json`,JSON.stringify({destination:route.code,departure:date,navigationStatus,url:url.toString(),title:await page.title().catch(()=>''),error:e instanceof Error?e.message:String(e),visibleText:body.slice(0,16000),screenshot},null,2));
+    console.error(`Failure diagnostics saved: ${prefix}.json${screenshot?' and screenshot':''}`);
+   }catch{console.error('Could not save failure diagnostics');}
+   await this.checkBlocked(page).catch(error=>{if(error instanceof Blocked)throw error;});throw e;
+  }
   finally{await context.close();}
  }
 }

@@ -44,3 +44,7 @@ No browser credentials, CAPTCHA service, proxy rotation or payment automation is
 - Expired leases are automatically reclaimed. A completed final observation is recognized after a crash without rerunning the whole job.
 - Screenshots are retained locally for seven days and pruned by the worker. Docker log rotation is configured. Firestore history retention is explicit, not paid TTL: export observations before deleting older history through your own maintenance process. Current itinerary snapshots remain separate.
 - Keep the worker's daily limit aligned with the documented configuration. Reaching it requeues the job for a later day; it never enables billing.
+
+## Pilot failures
+
+A timeout waiting for “2 Adults” does not establish whether the server is blocked. Failed searches save `failure_*.json` and, when possible, a matching PNG in the artifact directory before closing the browser. JSON records the navigation status, page title, URL without query parameters, bounded visible text and the original error. Cookies and browser storage are not captured. Inspect this evidence before changing selectors or retrying; collection remains unapproved until booking-summary validation passes.

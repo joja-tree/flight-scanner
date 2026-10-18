@@ -48,3 +48,9 @@ No browser credentials, CAPTCHA service, proxy rotation or payment automation is
 ## Pilot failures
 
 A timeout waiting for “2 Adults” does not establish whether the server is blocked. Failed searches save `failure_*.json` and, when possible, a matching PNG in the artifact directory before closing the browser. JSON records the navigation status, page title, URL without query parameters, bounded visible text and the original error. It also records bounded JavaScript errors, failed requests, HTTP error statuses and frame URLs to diagnose blank pages; request URLs omit query strings and fragments, and request/response bodies and headers are not recorded. Cookies and browser storage are not captured. Inspect this evidence before changing selectors or retrying; collection remains unapproved until booking-summary validation passes.
+
+## Local installed Chrome pilot (macOS/Linux)
+
+Run `npm run worker:pilot:chrome -- worker/pilot.example.json` on the computer with Chrome installed. This launches visible installed Chrome with a dedicated persistent profile at `worker/artifacts/chrome-profile`, never the normal personal profile. Browser sandboxing remains enabled; no automation-disguising flags, proxy or CORS bypass is used. Do not run two processes against this profile. The pilot closes Chrome on completion or failure and does not write to Firebase. An access challenge stops the pilot; inspect evidence and arrange any manual verification before a new attempt. The computer must stay awake during scans. A successful manual Chrome session does not validate this profile or automated collection.
+
+For the continuous worker, `BROWSER_MODE=local-chrome npm run worker` selects the same profile; Firebase credentials and `PILOT_APPROVED=true` are still required, and must not be enabled until the local pilot is reviewed. The profile contains browser session data: keep it private, exclude it from exports and do not share the artifact directory wholesale.

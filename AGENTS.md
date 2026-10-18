@@ -8,6 +8,7 @@ Next.js App Router website on Vercel; Firebase Auth/Firestore; separate Dockeriz
 - `npm run dev` — local website at 127.0.0.1:3000.
 - `npm run typecheck`, `npm test`, `npm run build` — core checks.
 - `npm run test:rules`, `npm run test:integration` — isolated Firestore emulator tests; Java 21 required.
+- `npm run worker:pilot:chrome -- worker/pilot.example.json` — visible installed Chrome pilot with a dedicated private profile; see worker operations.
 - `npm run worker:pilot -- worker/pilot.example.json` — real airline pilot, requiring Chromium and network access. Do not run full scans before reviewing actual-host evidence.
 
 ## Navigation and invariants

@@ -16,7 +16,8 @@
     "test:integration": "firebase emulators:exec --only firestore --project demo-cebu-finder 'node --import tsx --test tests/queue.integration.ts'",
     "worker": "node --import tsx worker/main.ts",
     "worker:discover": "node --import tsx worker/discover.ts",
-    "worker:pilot": "node --import tsx worker/pilot.ts"
+    "worker:pilot": "node --import tsx worker/pilot.ts",
+    "worker:pilot:chrome": "BROWSER_MODE=local-chrome node --import tsx worker/pilot.ts"
   },
   "dependencies": {
     "next": "^16.0.0",

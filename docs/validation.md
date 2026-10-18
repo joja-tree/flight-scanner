@@ -22,3 +22,7 @@ The local browser used the explicitly labeled historical reference data. Missing
 - Begin a resumable initial scan after pilot approval. No full-year, all-destination scan has been completed.
 
 Public refresh remains disabled until the pilot establishes safe limits. The UI and queue tests do not establish that the airline permits collection from the server.
+
+## Local Chrome adaptation
+
+Added a visible installed-Chrome mode using a dedicated persistent profile and enabled Chromium sandbox. TypeScript and nine unit tests pass. The attempted macOS pilot failed during Chrome launch because the execution environment denied Crashpad/macOS service access, before any airline navigation. A user-terminal run is still required; no local Chrome fare validation has succeeded. The earlier Debian Chromium pilot encountered the airline’s explicit suspicious-activity page and remains unapproved.

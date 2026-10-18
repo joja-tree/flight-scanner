@@ -1,14 +1,22 @@
-import {chromium,type Browser,type Page} from 'playwright';
+import {chromium,type Browser,type BrowserContext,type Page} from 'playwright';
 import {bookingUrl,mondayAfter,observationSchema,type Observation,type Destination} from '../lib/domain';
 import {parseFlightCard,verifySummary,type FlightCard} from './parser';
 import {createHash} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
 export class Blocked extends Error {}
 export class Collector {
  browser:Browser|null=null;
- async start(){this.browser=await chromium.launch({headless:true});}
- async close(){await this.browser?.close();}
- async checkBlocked(page:Page){const t=await page.locator('body').innerText();if(/verify you are human|access denied|unusual traffic|complete the captcha|security verification/i.test(t))throw new Blocked('Airline verification or access block requires owner attention');}
+ context:BrowserContext|null=null;
+ async start(){
+  if(process.env.BROWSER_MODE==='local-chrome'){
+   // Fixed dedicated profile: never attach to the user's ordinary Chrome profile.
+   this.context=await chromium.launchPersistentContext(resolve('worker/artifacts/chrome-profile'),{channel:'chrome',headless:false,locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000},chromiumSandbox:true});
+  }else{this.browser=await chromium.launch({headless:true});}
+ }
+ async close(){await this.context?.close();await this.browser?.close();}
+
+ async checkBlocked(page:Page){const t=await page.locator('body').innerText();if(/verify you are human|access denied|unusual traffic|complete the captcha|security verification|something seems suspicious|unauthorized activity/i.test(t))throw new Blocked('Airline verification or access block requires owner attention');}
  async choose(page:Page,from:string,to:string,allowOvernight=false):Promise<FlightCard>{
   // Use only rendered card content. Smallest matching DIV avoids selecting an itinerary container.
   const candidates=await page.locator('div').evaluateAll(elements=>elements.map((e,index)=>({index,text:(e as HTMLElement).innerText})).filter(x=>x.text&&x.text.includes('All-in')&&x.text.includes('Depart')));
@@ -22,8 +30,8 @@ export class Collector {
   return best.flight!;
  }
  async collect(route:Destination,date:string):Promise<Observation>{
-  if(!this.browser)throw new Error('Collector not started');
-  const context=await this.browser.newContext({locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000}});
+  if(!this.browser&&!this.context)throw new Error('Collector not started');
+  const context=this.context??await this.browser!.newContext({locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000}});
   const page=await context.newPage();page.setDefaultTimeout(15000);
   const safeUrl=(value:string)=>{try{const u=new URL(value);return u.origin+u.pathname;}catch{return '(invalid URL)';}};
   const pageErrors:string[]=[];
@@ -76,6 +84,6 @@ export class Collector {
    }catch{console.error('Could not save failure diagnostics');}
    await this.checkBlocked(page).catch(error=>{if(error instanceof Blocked)throw error;});throw e;
   }
-  finally{await context.close();}
+  finally{if(!this.context)await context.close();else await page.close();}
  }
 }

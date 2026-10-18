@@ -25,6 +25,13 @@ export class Collector {
   if(!this.browser)throw new Error('Collector not started');
   const context=await this.browser.newContext({locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000}});
   const page=await context.newPage();page.setDefaultTimeout(15000);
+  const safeUrl=(value:string)=>{try{const u=new URL(value);return u.origin+u.pathname;}catch{return '(invalid URL)';}};
+  const pageErrors:string[]=[];
+  const failedRequests:{url:string;resourceType:string;error:string}[]=[];
+  const httpErrors:{url:string;resourceType:string;status:number}[]=[];
+  page.on('pageerror',error=>{if(pageErrors.length<20)pageErrors.push(error.message.replace(/https?:\/\/[^\s)]+/g,safeUrl).slice(0,1000));});
+  page.on('requestfailed',request=>{if(failedRequests.length<40)failedRequests.push({url:safeUrl(request.url()),resourceType:request.resourceType(),error:request.failure()?.errorText??'Unknown'});});
+  page.on('response',response=>{if(response.status()>=400&&httpErrors.length<40)httpErrors.push({url:safeUrl(response.url()),resourceType:response.request().resourceType(),status:response.status()});});
   const base={destination:route.code,departure:date,returnDate:mondayAfter(date),checkedAt:new Date().toISOString(),quote:null,indicativeBaseFare:null};
   let navigationStatus:number|null=null;
   try{
@@ -64,7 +71,7 @@ export class Collector {
     const body=await page.locator('body').innerText({timeout:3000}).catch(()=>'(Body unavailable)');
     const screenshot=await page.screenshot({fullPage:true,timeout:5000}).then(async bytes=>{await writeFile(`${prefix}.png`,bytes);return `${prefix}.png`;}).catch(()=>null);
     const url=new URL(page.url());url.search='';url.hash='';
-    await writeFile(`${prefix}.json`,JSON.stringify({destination:route.code,departure:date,navigationStatus,url:url.toString(),title:await page.title().catch(()=>''),error:e instanceof Error?e.message:String(e),visibleText:body.slice(0,16000),screenshot},null,2));
+    await writeFile(`${prefix}.json`,JSON.stringify({destination:route.code,departure:date,navigationStatus,pageErrors,failedRequests,httpErrors,frames:page.frames().map(frame=>safeUrl(frame.url())),url:url.toString(),title:await page.title().catch(()=>''),error:e instanceof Error?e.message:String(e),visibleText:body.slice(0,16000),screenshot},null,2));
     console.error(`Failure diagnostics saved: ${prefix}.json${screenshot?' and screenshot':''}`);
    }catch{console.error('Could not save failure diagnostics');}
    await this.checkBlocked(page).catch(error=>{if(error instanceof Blocked)throw error;});throw e;

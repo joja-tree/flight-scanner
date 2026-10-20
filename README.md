@@ -1,8 +1,8 @@
 # Cebu Flight Finder
 
-A personal weekend-trip finder for two adults leaving Cebu on Thursday or Friday and returning Monday. Browse verified fare observations by price, calendar or destination, and request resumable checks from a browser worker on your own server.
+Find the five cheapest destinations from Cebu for two adults across up to five exact round-trip date pairs. Weekend shortcuts are available, with per-search exclusions and a resumable local Chrome batch runner.
 
-**Current state:** the app, authenticated APIs, queue, Firebase rules, import/export and pilot-gated collector are implemented. The full 2027 scan and server-side airline access are not yet verified. Without Firebase configuration, the app opens in an explicitly labeled historical reference mode. It contains no invented flight prices.
+**Current state:** the app, authenticated APIs, queue, Firebase rules, import/export and pilot-gated collector are implemented. Date-pair search replaces full-year scanning. Server-side airline access is blocked; the changed arbitrary-return collector still requires a new live pilot. Without Firebase configuration, the app opens in an explicitly labeled historical reference mode. It contains no invented flight prices.
 
 ## Getting started
 
@@ -22,7 +22,7 @@ Open http://127.0.0.1:3000. Blank Firebase values show the historical reference 
 - Tailwind CSS and local shadcn/ui-style Button/Dialog components using Radix primitives.
 - Zod for API, import and fare validation.
 - Firebase Google Authentication and Firestore, with server-side Admin SDK authorization.
-- Dockerized Node.js/Playwright Chromium worker; one active browser, no n8n or paid queue service.
+- Local attached-Chrome Node.js/Playwright batch runner (optional Docker image); one active browser, no n8n or paid queue service.
 
 ## Configuration
 
@@ -55,15 +55,15 @@ The emulator commands use the isolated `demo-cebu-finder` project and do not nee
 
 ## Features and limits
 
-- All 105 Thursday/Friday departure dates in 2027, with Monday returns including January 2028.
+- Up to five exact date pairs, weekend shortcuts, and all/domestic/international/shortlist destinations.
 - Price rankings use two-adult totals and preserve older good observations when later searches fail.
 - Visible timestamps, stale-fare labels, pagination, partial-route coverage and explicit empty states.
-- Google sign-in, controlled month refreshes, owner full-year jobs, cancellation and resumable leases.
+- Google sign-in, owner-only batches, cancellation, exclusions/Undo and resumable leases.
 - Owner import/export with validation and evidence metadata.
 - Airline links open a search; the app never purchases or holds tickets.
 
-The initial route registry is partial. Discovery output requires reconciliation, and the browser adapter needs actual-host validation before full scans. Calendar base fares are never substituted for verified totals. See [architecture](docs/architecture.md) for the precise behavior and current collection limitations.
+The initial route registry is partial. Discovery output requires reconciliation, and the browser adapter needs actual-host validation before collecting new searches. Calendar base fares are never substituted for verified totals. See [architecture](docs/architecture.md) for the precise behavior and current collection limitations.
 
 ## Deployment and documentation
 
-Connect the GitHub repository to Vercel, configure Firebase, and deploy the worker to your existing server. Detailed instructions: [deployment](docs/deployment.md), [worker operations](docs/worker.md), [import format](docs/data-format.md). [AGENTS.md](AGENTS.md) contains concise contributor guidance.
+Connect the GitHub repository to Vercel, configure Firebase, and run selected batches on your local computer. Detailed instructions: [deployment](docs/deployment.md), [worker operations](docs/worker.md), [import format](docs/data-format.md). [AGENTS.md](AGENTS.md) contains concise contributor guidance.

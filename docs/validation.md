@@ -1,28 +1,14 @@
 # Validation status
 
-Validated locally on 18 October 2026. Deployment and collection are separate milestones.
+Date-pair implementation checks (21 October 2026, Asia/Manila):
 
-## Passed
+- TypeScript and production Next.js build passed.
+- 11 domain/parser tests passed: legacy weekend generation, exact pairs, distinct return-date keys, two-adult evidence, top-five unique destinations, exclusions, budget filtering and missing prices.
+- 9 isolated Firestore emulator integration tests passed: duplicate batches, owner authorization, global leases, stale-worker fencing, atomic daily budgets, cancellation, block/resume, exclusions/Undo, fresh reuse, legacy migration and distinct unreleased returns.
+- Firestore rules test passed: browser clients, including forged owner claims, cannot directly alter fares or jobs.
+- Local browser loaded actual migrated Firebase fares; removal/Undo and pagination worked. Mobile viewport checked for horizontal overflow.
+- Production migration cancelled 60 legacy jobs and moved 10 fare snapshots to keys including both dates; historical observations retained. Existing collection pause retained.
 
-- TypeScript checking and Next.js production compilation.
-- Nine unit tests: all 105 departure dates, Monday returns including January 2028, money and two-adult validation, direct flights, preserved verified observations, import validation, lease/cooldown policy, and visible booking-summary parsing.
-- Six Firestore emulator integration tests: concurrent request deduplication, cooldown, lease recovery and stale-worker fencing, atomic daily budget, cancellation ownership, collection pause/resume, and month/year overlap.
-- Firestore rules test: anonymous users, authenticated users, and forged owner claims cannot read or write protected collections directly.
-- Browser checks on desktop and a 390px mobile viewport: ranking cards, calendar, destination comparison, Thursday filter, budget empty state, trip details, booking links, refresh dialog, and no horizontal overflow.
+## Remaining external validation
 
-The local browser used the explicitly labeled historical reference data. Missing observations displayed as unchecked, never free flights.
-
-## Still required before production collection
-
-- Configure the real Firebase project; test Google sign-in, authorized owner endpoints, and import/export with real project credentials.
-- Deploy to the user's Vercel project and verify domain, authentication authorized domains, and free-plan eligibility.
-- Build and run the Docker image on the actual server. Run the domestic/international pilot and compare two-adult totals against visible airline summaries.
-- Reconcile the complete direct-route registry. The included four-route reference registry is partial; discovery currently exports visible route-menu evidence for owner review.
-- Validate live collection selectors and unavailable/unreleased evidence. Ambiguous results currently fail safely; they do not assert sold-out or unreleased inventory.
-- Begin a resumable initial scan after pilot approval. No full-year, all-destination scan has been completed.
-
-Public refresh remains disabled until the pilot establishes safe limits. The UI and queue tests do not establish that the airline permits collection from the server.
-
-## Local Chrome adaptation
-
-Added a visible installed-Chrome mode using a dedicated persistent profile and enabled Chromium sandbox. TypeScript and nine unit tests pass. The attempted macOS pilot failed during Chrome launch because the execution environment denied Crashpad/macOS service access, before any airline navigation. A user-terminal run is still required; no local Chrome fare validation has succeeded. The earlier Debian Chromium pilot encountered the airline’s explicit suspicious-activity page and remains unapproved.
+The dedicated Chrome endpoint was unavailable during this run, so the changed collector has not yet passed a domestic/international pilot with a non-Monday return. Previous Monday-return pilot observations remain valid historical evidence only. No new automated fare is claimed from this implementation session. Stop any old continuous worker before unpausing collection.

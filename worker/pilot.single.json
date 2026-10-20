@@ -1,0 +1,14 @@
+[
+  {
+    "route": {
+      "code": "BCD",
+      "name": "Bacolod",
+      "country": "Philippines",
+      "kind": "domestic",
+      "directStatus": "candidate",
+      "verifiedAt": null,
+      "source": "https://www.cebupacificair.com/en-PH/"
+    },
+    "date": "2027-03-05"
+  }
+]

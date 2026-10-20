@@ -1,37 +1,36 @@
 # Architecture and data flow
 
-The Next.js app runs on Vercel. Firebase Authentication supplies verified Google ID tokens. Firestore stores the route registry, itinerary observations and scan jobs. A single Dockerized worker runs on an existing server and polls Firestore; no inbound port, n8n, paid data service, Firebase Functions or Redis is required.
+Next.js on Vercel serves the interface and validated APIs. Firebase Authentication verifies Google identities; Firestore stores routes, observations and search batches. The local attached-Chrome worker runs one specified batch and exits. No scheduler, paid API, Firebase Functions or extra queue service is used.
 
-## Public website
+## Date-based discovery
 
-`GET /api/destinations` returns up to 100 routes and registry completeness. `GET /api/fares?month=3&cursor=...` returns up to 100 itinerary records, ordered by document ID. Both responses are CDN-cacheable for 60 seconds. Ranking, budget and day filters apply to loaded pages only; the UI discloses pagination. Opening a booking link never marks an observation refreshed.
+A search contains one to five explicit departure/return pairs and up to 100 destination codes. Duplicate pairs/codes are normalized. The UI offers all, domestic, international and shortlist selection plus Thursday/Friday-to-Monday shortcuts. Other weekdays and year boundaries are supported. New scans reject past departures; historical results remain browsable.
 
-Without Firebase server configuration, these read endpoints serve four historically observed domestic routes and one historical Bacolod quote. This is explicitly labeled reference mode. Configured projects receive their actual database contents, including an empty state; reference data is never silently inserted into production.
+Rankings take each destination's cheapest verified two-adult round trip across the selected pairs, then display five unique destinations. Ties sort by destination code and dates. Optional budgets filter verified totals. Removed destinations are local to this search and can be restored. The alternate-date view compares selected date pairs, rather than expanding into an entire month.
 
-## Authentication and authorization
+The route registry may contain connecting destinations. Candidates remain labeled until direct flights are actually observed. Missing data, failed searches, unavailable flights and unreleased dates are distinct. Only verified booking-summary totals enter rankings; older good fares survive later failures. Every price has a timestamp, with a 24-hour stale threshold. Incomplete/stale coverage is labeled “Cheapest verified so far.” There is no price-based pruning.
 
-Google registration is open to everyone. `GET /api/session` verifies the ID token (including revocation) and derives owner access from server-only `OWNER_UID`. No browser-supplied role is trusted. All mutations verify the exact `APP_ORIGIN`, bearer token, input shape and size. Firestore rules deny direct browser access to every collection; the Admin SDK is used only in trusted services. Never grant users Admin SDK credentials.
+## APIs and authorization
 
-`POST /api/refresh` accepts `{scope:"month",destination:"BCD",month:3}` or owner-only `{scope:"year"}`. Public requests remain disabled until `PUBLIC_REFRESH_ENABLED=true`. `POST /api/jobs` with `{id}` cancels an owned job; owner can cancel any job. `POST /api/resume` is owner-only and should follow actual resolution of a blocker. `GET /api/jobs` returns at most 30 recent jobs, scoped to the caller unless owner.
+- `GET /api/destinations`: bounded route registry and completeness flag.
+- `GET /api/fares?search=<JSON>&cursor=<offset>`: JSON contains `pairs:[{departure,returnDate}]` and `destinations:[code]`. Reads 50 combinations per page, returning `fares`, `nextCursor`, `total`, and `reference`. Rankings cover loaded pages; the UI explicitly offers loading the rest. Responses cache for 60 seconds.
+- `POST /api/refresh`: `{scope:"search",pairs,destinations,force:false}`. Owner-only even if the legacy public-refresh environment flag is set. Returns batch `id`, `created`, and `reused`. Active matching batches deduplicate transactionally, including Scan again requests. Force applies only when creating a new run.
+- `GET /api/jobs`: at most 30 recent jobs filtered to accessible search batches; `?id=search_…` fetches one. Lease tokens are never returned. `POST {id}` requests cancellation. `PATCH {id,excluded:[codes]}` persists owner exclusions.
+- `GET /api/session`: derives owner identity from server-only `OWNER_UID`; never from client fields.
+- Owner import/export and resume endpoints remain available. Resume only after resolving and validating the blocker.
 
-## Queue and consistency
+All mutations check exact `APP_ORIGIN`, verified Firebase identity, strict Zod schemas and bounded request sizes. Firestore rules deny direct browser access. Credentials stay on trusted servers. Historical reference mode applies only when server Firebase configuration is absent; it never substitutes data for a failing configured database.
 
-A route/month has a deterministic job ID. A year job uses month 0. Enqueue transactions reuse active year/month jobs, enforce a user cooldown and bounded pending count, and reserve new work atomically. A year request excludes dates covered by active monthly jobs. Finished jobs can be explicitly refreshed again.
+## Batch worker and consistency
 
-`system/queue` holds a global worker lease. Claims use a random token and a three-minute expiry; heartbeats run every 30 seconds. Transactions guard saves with the job's token, cursor and running state. The same transaction writes the observation, merges the latest fare and advances the cursor. Stale workers cannot commit. Only one global scan runs even if a second worker is accidentally launched. Cancellation occurs between searches.
+A batch ID hashes the owner, normalized date pairs and destinations. It persists exclusions, processed itinerary IDs, force/freshness preference and status. The worker requires the ID explicitly, preventing accidental consumption of unrelated jobs. It reuses results under 24 hours old only when the latest attempt is verified; Scan again bypasses reuse.
 
-Each browser attempt reserves one unit in `usage/YYYY-MM-DD` before execution; retries also count. The application budget resets at midnight Asia/Manila. **This is independent of Firestore's quota reset**, which uses Pacific time. Exhausted budgets requeue work; failed processing never resets the counter. Access challenges pause the entire queue immediately. Three consecutive parsing/search failures also pause it. A crash leaves a reclaimable lease and saved cursor.
+One global three-minute lease fences workers; heartbeats run every 30 seconds. Saves check token, running state and unprocessed itinerary ID transactionally, then merge the fare and advance progress. Expired leases permit restart recovery. Cancellation and exclusions take effect between searches; an in-flight result may still be saved. Excluded combinations are not marked processed. Undo can requeue an otherwise completed batch. Cancelled batches require a new request.
 
-## Price model
+Every browser attempt, including the one allowed retry, reserves daily budget atomically. Default and maximum: 300 attempts per Manila day. This is independent of Firestore's Pacific quota reset. Searches wait at least 15 seconds. The runner exits on completion, exhausted budget, cancellation or pause; it never waits overnight or polls indefinitely. An access block or three consecutive failures pauses collection. Existing fares remain visible.
 
-Amounts are integer PHP centavos. A verified quote requires two direct legs operated by 5J/DG, two adults, matching dates/airports and a booking-summary total equal to twice the two per-adult fares. Monday arrival is required. Times are airport-local.
+## Price model and compatibility
 
-Each itinerary holds `latest` and `lastVerified`; a failed or indicative attempt cannot erase a good historical quote. Historical snapshots also live in `observations`. Writes are idempotent by itinerary and observation timestamp. Imports merge chronologically. Quotes older than 24 hours are labeled for rechecking; this freshness threshold is a display choice, not a price guarantee.
+Integer PHP centavos; exactly two adults; direct 5J/DG flights; matching airports/dates; booking summary must equal twice both per-adult fares. Return arrival must be on the selected return date. Optional extras are excluded and international travel tax can be unknown. The app never books tickets.
 
-Statuses: verified, indicative, unavailable, unreleased, failed and blocked. Unchecked is represented by no observation. The browser adapter currently conservatively records failures instead of guessing unavailable/unreleased statuses from an empty page; validated owner imports may supply these explicit statuses with evidence.
-
-## Collection limitations
-
-The adapter uses visible rendered flight cards and the booking summary, never private API tokens. It expands bounded flight lists, chooses the lowest parseable direct flight on each leg that returns to Cebu on Monday, selects GO Basic, and confirms two-adult subtotals. It is a pilot-gated integration, not a proven production scraper. Site text/layout changes can require adapter updates. Explicit +1-day outbound arrival labels are supported; return flights arriving after Monday are excluded. Ambiguous date markers must be inspected in the pilot. The route-discovery helper exports visible menu evidence for manual reconciliation of airport codes and route candidates; it does not infer nonstop service or declare the registry complete.
-
-No user passenger names or payment information are collected. The app never completes a booking.
+Canonical itinerary keys include destination, departure and return date. Legacy departure-only snapshots are read and merged during transition. `worker/migrate-searches.ts` cancels legacy queue entries and migrates snapshots idempotently while retaining observation history. See [worker operations](worker.md) for cutover and pilot limitations.

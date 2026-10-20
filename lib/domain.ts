@@ -31,7 +31,7 @@ export const observationSchema = z.object({
   note: z.string().max(1000), evidence: z.string().min(1).max(500),
 }).strict().superRefine((o, ctx) => {
   const add = (message: string) => ctx.addIssue({code:'custom',message});
-  if (!departures().includes(o.departure) || o.returnDate !== mondayAfter(o.departure)) add('Dates must be a 2027 Thursday/Friday and the following Monday');
+  if (o.returnDate <= o.departure) add('Return date must follow departure');
   if (o.status === 'verified' && !o.quote) add('Verified observation requires a confirmed quote');
   if (o.status !== 'verified' && o.quote) add('Only verified observations may contain a quote');
   if (o.status === 'indicative' && o.indicativeBaseFare === null) add('Indicative observations require a base fare');
@@ -41,33 +41,40 @@ export const observationSchema = z.object({
     const {outbound:a,inbound:b}=o.quote;
     if (a.from!=='CEB'||a.to!==o.destination||b.from!==o.destination||b.to!=='CEB') add('Quote must be a direct Cebu round trip');
     if (a.date!==o.departure||b.date!==o.returnDate) add('Flight dates must match itinerary');
-    if (a.arrivalDate < a.date || a.arrivalDate > o.returnDate || b.arrivalDate !== o.returnDate) add('Flights must return to Cebu on Monday');
+    if (a.arrivalDate < a.date || a.arrivalDate > o.returnDate || b.arrivalDate !== o.returnDate) add('Flights must arrive on the selected return date');
   }
 });
 export type Observation = z.infer<typeof observationSchema>;
 export type Quote = z.infer<typeof quoteSchema>;
 export type FareRecord = { id: string; destination: string; departure: string; returnDate: string; month: number; latest: Observation; lastVerified: Observation | null };
-export function itineraryId(destination: string, departure: string) { return `${destination}_${departure}`; }
+export function itineraryId(destination: string, departure: string, returnDate=mondayAfter(departure)) { return `${destination}_${departure}_${returnDate}`; }
 export function mergeObservation(previous: FareRecord | undefined, o: Observation): FareRecord {
   const newer = !previous || o.checkedAt >= previous.latest.checkedAt;
   const verified = o.status === 'verified' && (!previous?.lastVerified || o.checkedAt >= previous.lastVerified.checkedAt) ? o : previous?.lastVerified ?? null;
-  return {id:itineraryId(o.destination,o.departure),destination:o.destination,departure:o.departure,returnDate:o.returnDate,month:Number(o.departure.slice(5,7)),latest:newer?o:previous!.latest,lastVerified:verified};
+  return {id:itineraryId(o.destination,o.departure,o.returnDate),destination:o.destination,departure:o.departure,returnDate:o.returnDate,month:Number(o.departure.slice(5,7)),latest:newer?o:previous!.latest,lastVerified:verified};
 }
-export function bookingUrl(destination: string, departure: string) {
-  const q = new URLSearchParams({o1:'CEB',d1:destination,adt:'2',chd:'0',inl:'0',inf:'0',dd1:departure,dd2:mondayAfter(departure)});
+export function bookingUrl(destination: string, departure: string, returnDate=mondayAfter(departure)) {
+  const q = new URLSearchParams({o1:'CEB',d1:destination,adt:'2',chd:'0',inl:'0',inf:'0',dd1:departure,dd2:returnDate});
   return `https://www.cebupacificair.com/en-PH/booking/select-flight?${q}`;
 }
 export const money = (centavos: number) => new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP',maximumFractionDigits:2}).format(centavos/100);
 export function stale(o: Observation, now=Date.now()) { return now-Date.parse(o.checkedAt)>24*60*60*1000; }
 export const importSchema = z.object({version:z.literal(1),destinations:z.array(routeSchema).max(100),observations:z.array(observationSchema).max(100)}).strict().superRefine((b,ctx)=>{
-  const ids=b.observations.map(o=>itineraryId(o.destination,o.departure)+'_'+o.checkedAt);
+  const ids=b.observations.map(o=>itineraryId(o.destination,o.departure,o.returnDate)+'_'+o.checkedAt);
   if(new Set(ids).size!==ids.length)ctx.addIssue({code:'custom',message:'Duplicate observations in import'});
   if(new Set(b.destinations.map(d=>d.code)).size!==b.destinations.length)ctx.addIssue({code:'custom',message:'Duplicate destinations in import'});
 });
-export const refreshSchema=z.discriminatedUnion('scope',[
-  z.object({scope:z.literal('month'),destination:airportSchema,month:z.number().int().min(1).max(12)}).strict(),
-  z.object({scope:z.literal('year')}).strict(),
-]);
+export const pairSchema=z.object({departure:dateSchema,returnDate:dateSchema}).strict().refine(p=>p.returnDate>p.departure,'Return date must follow departure');
+export type DatePair=z.infer<typeof pairSchema>;
+export const searchSchema=z.object({
+ pairs:z.array(pairSchema).min(1).max(5), destinations:z.array(airportSchema).min(1).max(100),
+}).strict().transform(s=>({pairs:[...new Map(s.pairs.map(p=>[p.departure+'_'+p.returnDate,p])).values()].sort((a,b)=>a.departure.localeCompare(b.departure)||a.returnDate.localeCompare(b.returnDate)),destinations:[...new Set(s.destinations)].sort()}));
+export const refreshSchema=z.object({scope:z.literal('search'),pairs:z.array(pairSchema).min(1).max(5),destinations:z.array(airportSchema).min(1).max(100),force:z.boolean().default(false)}).strict().transform(s=>({...searchSchema.parse({pairs:s.pairs,destinations:s.destinations}),scope:s.scope,force:s.force}));
 export type RefreshRequest=z.infer<typeof refreshSchema>;
-export type Job = {id:string;uid:string;destination:string;month:number;dates:string[];cursor:number;status:'queued'|'running'|'paused'|'completed'|'cancelled';createdAt:number;updatedAt:number;leaseUntil:number;leaseToken:string|null;cancelRequested:boolean;message:string;failures:number};
-export function jobKey(destination:string,month:number){return `${YEAR}_${destination}_${String(month).padStart(2,'0')}`;}
+export type Job={id:string;kind:'search';uid:string;pairs:DatePair[];destinations:string[];excluded:string[];done:string[];force:boolean;status:'queued'|'running'|'paused'|'completed'|'cancelled';createdAt:number;updatedAt:number;leaseUntil:number;leaseToken:string|null;cancelRequested:boolean;message:string;failures:number};
+export function combinations(s:{pairs:DatePair[];destinations:string[]}){return s.pairs.flatMap(p=>s.destinations.map(destination=>({...p,destination,id:itineraryId(destination,p.departure,p.returnDate)})));}
+export function nextItinerary(j:Job){return combinations(j).find(x=>!j.excluded.includes(x.destination)&&!j.done.includes(x.id));}
+export function rankDestinations(fares:FareRecord[],excluded:string[]=[],budget=Infinity){
+ const sorted=fares.filter(f=>!excluded.includes(f.destination)&&f.lastVerified?.quote&&f.lastVerified.quote.total<=budget).sort((a,b)=>a.lastVerified!.quote!.total-b.lastVerified!.quote!.total||a.destination.localeCompare(b.destination)||a.departure.localeCompare(b.departure)||a.returnDate.localeCompare(b.returnDate));
+ return [...new Map(sorted.map(f=>f.destination).map(code=>[code,sorted.find(f=>f.destination===code)!])).values()].slice(0,5);
+}

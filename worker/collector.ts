@@ -1,20 +1,29 @@
-import {chromium,type Browser,type BrowserContext,type Page} from 'playwright';
-import {bookingUrl,mondayAfter,observationSchema,type Observation,type Destination} from '../lib/domain';
+import {chromium,type Browser,type BrowserContext,type Page,type Request as BrowserRequest,type Response as BrowserResponse} from 'playwright';
+import {mondayAfter,observationSchema,type Observation,type Destination} from '../lib/domain';
 import {parseFlightCard,verifySummary,type FlightCard} from './parser';
 import {createHash} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {searchFromHomepage} from './search-form';
 export class Blocked extends Error {}
 export class Collector {
  browser:Browser|null=null;
  context:BrowserContext|null=null;
  async start(){
-  if(process.env.BROWSER_MODE==='local-chrome'){
+  if(process.env.BROWSER_MODE==='attached-chrome'){
+   this.browser=await chromium.connectOverCDP('http://127.0.0.1:9222');
+   this.context=this.browser.contexts()[0]??null;
+   if(!this.context)throw new Error('Chrome has no browser context');
+  }else if(process.env.BROWSER_MODE==='local-chrome'){
    // Fixed dedicated profile: never attach to the user's ordinary Chrome profile.
    this.context=await chromium.launchPersistentContext(resolve('worker/artifacts/chrome-profile'),{channel:'chrome',headless:false,locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000},chromiumSandbox:true});
   }else{this.browser=await chromium.launch({headless:true});}
  }
- async close(){await this.context?.close();await this.browser?.close();}
+ async close(){
+  // Closing a connected Browser disconnects Playwright; do not close its owned context.
+  if(process.env.BROWSER_MODE!=='attached-chrome')await this.context?.close();
+  await this.browser?.close();
+ }
 
  async checkBlocked(page:Page){const t=await page.locator('body').innerText();if(/verify you are human|access denied|unusual traffic|complete the captcha|security verification|something seems suspicious|unauthorized activity/i.test(t))throw new Blocked('Airline verification or access block requires owner attention');}
  async choose(page:Page,from:string,to:string,allowOvernight=false):Promise<FlightCard>{
@@ -29,30 +38,47 @@ export class Collector {
   await page.getByText('Change',{exact:true}).first().waitFor({state:'visible',timeout:15000});
   return best.flight!;
  }
- async collect(route:Destination,date:string):Promise<Observation>{
+ async collect(route:Destination,date:string,returnDate=mondayAfter(date)):Promise<Observation>{
   if(!this.browser&&!this.context)throw new Error('Collector not started');
   const context=this.context??await this.browser!.newContext({locale:'en-PH',timezoneId:'Asia/Manila',viewport:{width:1440,height:1000}});
-  const page=await context.newPage();page.setDefaultTimeout(15000);
+  // Only this dedicated worker context is affected; avoid duplicate booking tabs.
+  const previousPages=context.pages();
+  const attached=process.env.BROWSER_MODE==='attached-chrome';
+  if(attached&&previousPages.length>1)throw new Error('Keep only one tab in the dedicated debugging Chrome window before running the pilot');
+  const page=attached&&previousPages[0]?previousPages[0]:await context.newPage();
+  if(!attached)for(const old of previousPages)await old.close();
+  page.setDefaultTimeout(15000);
   const safeUrl=(value:string)=>{try{const u=new URL(value);return u.origin+u.pathname;}catch{return '(invalid URL)';}};
   const pageErrors:string[]=[];
   const failedRequests:{url:string;resourceType:string;error:string}[]=[];
   const httpErrors:{url:string;resourceType:string;status:number}[]=[];
-  page.on('pageerror',error=>{if(pageErrors.length<20)pageErrors.push(error.message.replace(/https?:\/\/[^\s)]+/g,safeUrl).slice(0,1000));});
-  page.on('requestfailed',request=>{if(failedRequests.length<40)failedRequests.push({url:safeUrl(request.url()),resourceType:request.resourceType(),error:request.failure()?.errorText??'Unknown'});});
-  page.on('response',response=>{if(response.status()>=400&&httpErrors.length<40)httpErrors.push({url:safeUrl(response.url()),resourceType:response.request().resourceType(),status:response.status()});});
-  const base={destination:route.code,departure:date,returnDate:mondayAfter(date),checkedAt:new Date().toISOString(),quote:null,indicativeBaseFare:null};
+  const onError=(error:Error)=>{if(pageErrors.length<20)pageErrors.push(error.message.replace(/https?:\/\/[^\s)]+/g,safeUrl).slice(0,1000));};
+  const onFailed=(request:BrowserRequest)=>{if(failedRequests.length<40)failedRequests.push({url:safeUrl(request.url()),resourceType:request.resourceType(),error:request.failure()?.errorText??'Unknown'});};
+  const onResponse=(response:BrowserResponse)=>{if(response.status()>=400&&httpErrors.length<40)httpErrors.push({url:safeUrl(response.url()),resourceType:response.request().resourceType(),status:response.status()});};
+  page.on('pageerror',onError);page.on('requestfailed',onFailed);page.on('response',onResponse);
+  const base={destination:route.code,departure:date,returnDate,checkedAt:new Date().toISOString(),quote:null,indicativeBaseFare:null};
   let navigationStatus:number|null=null;
   try{
-   const response=await page.goto(bookingUrl(route.code,date),{waitUntil:'domcontentloaded',timeout:45000});
-   navigationStatus=response?.status()??null;
+   navigationStatus=await searchFromHomepage(page,route,date,returnDate);
    await this.checkBlocked(page);
    await page.getByText('2 Adults',{exact:true}).first().waitFor({state:'visible',timeout:30000});
    await this.checkBlocked(page);
    // A missing result is never silently treated as sold out or unreleased.
-   await page.getByText(/All-in\s*Fare\s*\/\s*guest/i).first().waitFor({state:'visible',timeout:30000});
+   await page.getByText(/All-in\s*Fare\s*\/\s*guest/i).filter({visible:true}).first().waitFor({state:'visible',timeout:30000});
+   // Apply the airline's direct-only filter before expanding results. Connecting
+   // itineraries are outside our scope and their lazy list can stall Show More.
+   for(let leg=0;leg<2;leg++){
+    const stops=page.getByRole('button',{name:'Stops',exact:true}).nth(leg);
+    await stops.click();
+    await page.getByText('Direct flights only',{exact:true}).filter({visible:true}).click();
+    await page.getByText('Apply',{exact:true}).filter({visible:true}).click();
+    if(await page.getByText('Direct flights only',{exact:true}).filter({visible:true}).count())await stops.click();
+   }
    for(let n=0;n<20;n++){
-    const more=page.getByText('Show More',{exact:true});if(!await more.count())break;
-    await more.first().click();await page.waitForTimeout(300);
+    const more=page.getByText('Show More',{exact:true}).filter({visible:true});if(!await more.count())break;
+    const before=await page.locator('body').innerText();
+    await more.first().click();
+    await page.waitForFunction(previous=>document.body.innerText!==previous,before,{timeout:5000}).catch(()=>{throw new Error('Show More did not expand the flight list; complete fare coverage cannot be verified');});
     if(n===19)throw new Error('Flight list exceeded expansion bound; cheapest fare not established');
    }
    const out=await this.choose(page,'CEB',route.code,true);
@@ -84,6 +110,6 @@ export class Collector {
    }catch{console.error('Could not save failure diagnostics');}
    await this.checkBlocked(page).catch(error=>{if(error instanceof Blocked)throw error;});throw e;
   }
-  finally{if(!this.context)await context.close();else await page.close();}
+  finally{page.off('pageerror',onError);page.off('requestfailed',onFailed);page.off('response',onResponse);if(!this.context)await context.close();else if(!attached)await page.close();}
  }
 }

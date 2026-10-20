@@ -1,5 +1,39 @@
 [
- {"route":{"code":"BCD","name":"Bacolod","country":"Philippines","kind":"domestic","directStatus":"candidate","verifiedAt":null,"source":"https://www.cebupacificair.com/en-PH/"},"date":"2027-03-05"},
- {"route":{"code":"MPH","name":"Boracay (Caticlan)","country":"Philippines","kind":"domestic","directStatus":"candidate","verifiedAt":null,"source":"https://www.cebupacificair.com/en-PH/"},"date":"2027-03-04"},
- {"route":{"code":"HKG","name":"Hong Kong","country":"Hong Kong (China)","kind":"international","directStatus":"candidate","verifiedAt":null,"source":"https://www.cebupacificair.com/en-PH/"},"date":"2027-03-05"}
+  {
+    "route": {
+      "code": "BCD",
+      "name": "Bacolod",
+      "country": "Philippines",
+      "kind": "domestic",
+      "directStatus": "candidate",
+      "verifiedAt": null,
+      "source": "https://www.cebupacificair.com/en-PH/"
+    },
+    "date": "2027-03-05",
+    "returnDate": "2027-03-09"
+  },
+  {
+    "route": {
+      "code": "MPH",
+      "name": "Boracay (Caticlan)",
+      "country": "Philippines",
+      "kind": "domestic",
+      "directStatus": "candidate",
+      "verifiedAt": null,
+      "source": "https://www.cebupacificair.com/en-PH/"
+    },
+    "date": "2027-03-04"
+  },
+  {
+    "route": {
+      "code": "HKG",
+      "name": "Hong Kong",
+      "country": "Hong Kong (China)",
+      "kind": "international",
+      "directStatus": "candidate",
+      "verifiedAt": null,
+      "source": "https://www.cebupacificair.com/en-PH/"
+    },
+    "date": "2027-03-05"
+  }
 ]

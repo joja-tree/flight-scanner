@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     init: true
-    restart: unless-stopped
+    restart: 'no'
     shm_size: 1gb
     mem_limit: 3g
     cpus: 2

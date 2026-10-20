@@ -1,6 +1,6 @@
 # Cebu Flight Finder
 
-Next.js App Router website on Vercel; Firebase Auth/Firestore; separate Dockerized Playwright worker. No n8n or paid cloud worker. Public refresh is disabled until the actual-host pilot is approved.
+Next.js App Router website on Vercel; Firebase Auth/Firestore; local attached-Chrome batch worker (optional Docker image). No n8n or paid cloud worker. Scanning is owner-only; actual-host pilot approval is required.
 
 ## Commands
 
@@ -8,6 +8,8 @@ Next.js App Router website on Vercel; Firebase Auth/Firestore; separate Dockeriz
 - `npm run dev` — local website at 127.0.0.1:3000.
 - `npm run typecheck`, `npm test`, `npm run build` — core checks.
 - `npm run test:rules`, `npm run test:integration` — isolated Firestore emulator tests; Java 21 required.
+- `node --env-file=worker/.env --import tsx worker/main.ts search_BATCH_ID` — run/resume one batch; attached Chrome must remain open.
+- `npm run worker:pilot:attached` — one-route diagnostic; full pilot uses `BROWSER_MODE=attached-chrome npm run worker:pilot -- worker/pilot.example.json`.
 - `npm run worker:pilot:chrome -- worker/pilot.example.json` — visible installed Chrome pilot with a dedicated private profile; see worker operations.
 - `npm run worker:pilot -- worker/pilot.example.json` — real airline pilot, requiring Chromium and network access. Do not run full scans before reviewing actual-host evidence.
 
@@ -17,8 +19,8 @@ Next.js App Router website on Vercel; Firebase Auth/Firestore; separate Dockeriz
 - Read [deployment](docs/deployment.md) for Firebase/Vercel configuration and free-tier boundaries.
 - Read [worker operations](docs/worker.md) before collector changes or deployment; [data format](docs/data-format.md) before imports/schema changes.
 - Prices are integer centavos. Only booking-summary-verified two-adult totals enter price rankings. Never turn failures or missing data into zero prices, sold-out claims or unreleased claims.
-- `lib/domain.ts` is authoritative for schemas and 2027 Thursday/Friday-to-Monday dates. Preserve January 2028 returns.
+- `lib/domain.ts` is authoritative for exact date-pair schemas and ranking. Itinerary keys must include both dates; never derive a selected return date from weekday defaults.
 - All browser database access is denied by rules. Server endpoints derive owner status from `OWNER_UID`; never trust client roles.
-- Queue writes must preserve transaction reads-before-writes, lease-token/cursor fencing, daily attempt reservation and previous good observations.
+- Queue writes must preserve transaction reads-before-writes, lease-token/processed-itinerary fencing, daily attempt reservation and previous good observations.
 - Never commit credentials, `.env` files, screenshots from private sessions, node_modules or worker artifacts. The bundled historical reference is labeled and is not fresh data.
 - Inspect the installed Next.js guide under `node_modules/next/dist/docs/` for framework-specific changes; generated agent rules are disabled to keep this file authoritative.

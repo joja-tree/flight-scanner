@@ -17,7 +17,8 @@
     "worker": "node --import tsx worker/main.ts",
     "worker:discover": "node --import tsx worker/discover.ts",
     "worker:pilot": "node --import tsx worker/pilot.ts",
-    "worker:pilot:chrome": "BROWSER_MODE=local-chrome node --import tsx worker/pilot.ts"
+    "worker:pilot:chrome": "BROWSER_MODE=local-chrome node --import tsx worker/pilot.ts",
+    "worker:pilot:attached": "BROWSER_MODE=attached-chrome node --import tsx worker/pilot.ts worker/pilot.single.json --single"
   },
   "dependencies": {
     "next": "^16.0.0",

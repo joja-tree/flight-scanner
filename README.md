@@ -2,7 +2,7 @@
 
 Find the five cheapest destinations from Cebu for two adults across up to five exact round-trip date pairs. Weekend shortcuts are available, with per-search exclusions and a resumable local Chrome batch runner.
 
-**Current state:** the app, authenticated APIs, queue, Firebase rules, import/export and pilot-gated collector are implemented. Date-pair search replaces full-year scanning. Server-side airline access is blocked; the changed arbitrary-return collector still requires a new live pilot. Without Firebase configuration, the app opens in an explicitly labeled historical reference mode. It contains no invented flight prices.
+**Current state:** the app, authenticated APIs, queue, Firebase rules, import/export and pilot-gated collector are implemented. Date-pair search replaces full-year scanning. Server-side airline access is blocked; the attached-Chrome pilot passed domestic/international cases including a Tuesday return. Without Firebase configuration, the app opens in an explicitly labeled historical reference mode. It contains no invented flight prices.
 
 ## Getting started
 

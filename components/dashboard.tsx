@@ -5,7 +5,7 @@ import {onAuthStateChanged,type User} from 'firebase/auth';
 import {ArrowUpRight,CalendarDays,Compass,Download,MapPin,Plane,RefreshCw,Upload,Users,X} from 'lucide-react';
 import {Button} from './ui/button';
 import {Dialog} from './ui/dialog';
-import {bookingUrl,combinations,importSchema,mondayAfter,money,rankDestinations,searchSchema,stale,type DatePair,type Destination,type FareRecord,type Job} from '@/lib/domain';
+import {bookingUrl,combinations,fareQuery,importSchema,mondayAfter,money,rankDestinations,searchSchema,stale,type DatePair,type Destination,type FareRecord,type Job} from '@/lib/domain';
 import {clientAuth,firebaseReady,login,logout} from '@/lib/firebase-client';
 const shortDate=(d:string)=>new Date(d+'T12:00:00Z').toLocaleDateString('en-PH',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
 const stamp=(d:string)=>new Date(d).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Manila'});
@@ -31,7 +31,7 @@ export function Dashboard(){
  function draft(){return searchSchema.parse({pairs,destinations:draftCodes});}
  async function loadResults(s:SearchConfig,offset=0){
   const version=++generation.current;
-  const d=await readJson(await fetch('/api/fares?'+new URLSearchParams({search:JSON.stringify(s),cursor:String(offset)})));
+  const d=await readJson(await fetch('/api/fares?'+fareQuery(s,offset)));
   if(version!==generation.current)return;
   setFares(previous=>offset?[...new Map([...previous,...d.fares].map(f=>[f.id,f])).values()]:d.fares);
   setCursor(d.nextCursor);setReference(d.reference);

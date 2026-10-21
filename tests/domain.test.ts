@@ -37,3 +37,13 @@ test('top five are unique, exclusions refill and missing fares never rank',async
  assert.equal(rankDestinations(fares,[],10050).length,1);
  assert.equal(rankDestinations([{...fares[0],lastVerified:null}]).length,0);
 });
+
+test('opening a saved job sends only search fields to the strict fares API',async()=>{
+ const {fareQuery,searchSchema}=await import('../lib/domain');
+ const savedJob={id:'search_example',kind:'search',uid:'owner',pairs:[{departure:'2027-03-05',returnDate:'2027-03-09'}],destinations:['BCD'],excluded:[],done:[],force:true,status:'queued',createdAt:1,updatedAt:1,leaseUntil:0,leaseToken:null,cancelRequested:false,message:'Ready',failures:0};
+ assert.equal(searchSchema.safeParse(savedJob).success,false);
+ const query=new URLSearchParams(fareQuery(savedJob,50));
+ assert.deepEqual(searchSchema.parse(JSON.parse(query.get('search')!)),{pairs:savedJob.pairs,destinations:savedJob.destinations});
+ assert.equal(query.get('cursor'),'50');
+ assert.equal(fareQuery(savedJob),fareQuery({pairs:savedJob.pairs,destinations:savedJob.destinations}));
+});

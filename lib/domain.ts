@@ -69,6 +69,11 @@ export type DatePair=z.infer<typeof pairSchema>;
 export const searchSchema=z.object({
  pairs:z.array(pairSchema).min(1).max(5), destinations:z.array(airportSchema).min(1).max(100),
 }).strict().transform(s=>({pairs:[...new Map(s.pairs.map(p=>[p.departure+'_'+p.returnDate,p])).values()].sort((a,b)=>a.departure.localeCompare(b.departure)||a.returnDate.localeCompare(b.returnDate)),destinations:[...new Set(s.destinations)].sort()}));
+// Jobs structurally contain a search, but their operational fields must never enter a public fare query.
+export function fareQuery(input:{pairs:DatePair[];destinations:string[]},cursor=0){
+ const search=searchSchema.parse({pairs:input.pairs,destinations:input.destinations});
+ return new URLSearchParams({search:JSON.stringify(search),cursor:String(cursor)}).toString();
+}
 export const refreshSchema=z.object({scope:z.literal('search'),pairs:z.array(pairSchema).min(1).max(5),destinations:z.array(airportSchema).min(1).max(100),force:z.boolean().default(false)}).strict().transform(s=>({...searchSchema.parse({pairs:s.pairs,destinations:s.destinations}),scope:s.scope,force:s.force}));
 export type RefreshRequest=z.infer<typeof refreshSchema>;
 export type Job={id:string;kind:'search';uid:string;pairs:DatePair[];destinations:string[];excluded:string[];done:string[];force:boolean;status:'queued'|'running'|'paused'|'completed'|'cancelled';createdAt:number;updatedAt:number;leaseUntil:number;leaseToken:string|null;cancelRequested:boolean;message:string;failures:number};

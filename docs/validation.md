@@ -9,6 +9,14 @@ Date-pair implementation checks (21 October 2026, Asia/Manila):
 - Local browser loaded actual migrated Firebase fares; removal/Undo and pagination worked. Mobile viewport checked for horizontal overflow.
 - Production migration cancelled 60 legacy jobs and moved 10 fare snapshots to keys including both dates; historical observations retained. Existing collection pause retained.
 
-## Remaining external validation
+## Live pilot
 
-The dedicated Chrome endpoint was unavailable during this run, so the changed collector has not yet passed a domestic/international pilot with a non-Monday return. Previous Monday-return pilot observations remain valid historical evidence only. No new automated fare is claimed from this implementation session. Stop any old continuous worker before unpausing collection.
+The attached-Chrome pilot passed on 22 October 2026 (Asia/Manila). All three visible booking-summary screenshots were reviewed for two adults, exact dates, direct flight details and fare-only totals:
+
+| Destination | 2027 dates | Total for two adults |
+| --- | --- | --- |
+| Bacolod | March 5–9 (Tuesday return) | PHP 7,993.52 |
+| Boracay (Caticlan) | March 4–8 | PHP 8,573.04 |
+| Hong Kong | March 5–8 | PHP 32,059.22 |
+
+Observations were imported into Firestore and collection was unpaused. No new search batch was queued. Hong Kong travel-tax treatment remains unknown. These are timestamped observations, not current-price guarantees. The server's headless access and complete route coverage remain unverified; continue using selected batches in the validated attached Chrome profile.
